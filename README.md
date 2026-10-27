@@ -16,7 +16,23 @@ Browser ──▶ React (frontend/) ──▶ Laravel API (backend/) ──▶ M
 
 ## Run locally (Windows)
 
-Prerequisites: PHP 8.3+, Composer, Node 20+, MySQL (or the MariaDB that ships with XAMPP).
+Prerequisites: PHP 8.4+ (Laravel 13's dependencies need it), Composer, Node 20+,
+MySQL (or the MariaDB that ships with XAMPP).
+
+0. **Model engine and weights** (one time, about 2.8 GB; not in the repo)
+   - Download `llama-b11853-bin-win-cpu-x64.zip` from the
+     [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases/tag/b11853)
+     and extract its contents into `model-engine/llama/`
+     (so that `model-engine/llama/llama-server.exe` exists).
+   - Download `Qwen3.5-4B-Q4_K_M.gguf` (Apache-2.0) from
+     [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/blob/main/Qwen3.5-4B-Q4_K_M.gguf)
+     into `model-engine/models/`, and check it:
+     ```powershell
+     (Get-FileHash model-engine\models\Qwen3.5-4B-Q4_K_M.gguf).Hash
+     # expected: 00FE7986FF5F6B463E62455821146049DB6F9313603938A70800D1FB69EF11A4
+     ```
+   A different GGUF model also works: pass `-Model <file> -Alias <name>` to
+   `start-llama.ps1` and set the same alias in `LLM_MODEL`.
 
 1. **Database** — create a database named `assistant` (utf8mb4), then set the
    `DB_*` values in `backend/.env`.
