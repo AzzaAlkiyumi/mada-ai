@@ -1,0 +1,40 @@
+# Rafeeq model server (llama.cpp). Installed by setup-server.sh to
+# /etc/systemd/system/llama-server.service. Settings and the API key live in
+# /etc/rafeeq/llama.env (readable by root and the llama user only).
+
+[Unit]
+Description=Rafeeq model server (llama.cpp)
+After=network.target
+
+[Service]
+Type=simple
+User=llama
+Group=llama
+EnvironmentFile=/etc/rafeeq/llama.env
+Environment=LD_LIBRARY_PATH=/opt/llama/bin
+# LLAMA_API_KEY is read from the environment, so it does not appear in `ps`.
+ExecStart=/opt/llama/bin/llama-server \
+    --model /opt/llama/models/${LLAMA_MODEL_FILE} \
+    --alias ${LLAMA_ALIAS} \
+    --host 127.0.0.1 \
+    --port 8080 \
+    --ctx-size ${LLAMA_CTX} \
+    --parallel 1 \
+    --threads ${LLAMA_THREADS} \
+    --no-webui
+Restart=on-failure
+RestartSec=5
+
+# Keep the model from starving MySQL and PHP of memory.
+MemoryMax=5G
+
+# Hardening: the service only needs to read its own files.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadOnlyPaths=/opt/llama
+
+[Install]
+WantedBy=multi-user.target

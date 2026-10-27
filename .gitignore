@@ -1,0 +1,6 @@
+# Local model engine binaries and weights (downloaded, not source)
+/model-engine/llama/
+/model-engine/models/
+
+# Release archives (built by deploy/package-release.ps1)
+/rafeeq-release.tar.gz

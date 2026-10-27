@@ -1,0 +1,11 @@
+# Low-memory MySQL settings for an 8 GB server shared with the model.
+# Installed by setup-server.sh to /etc/mysql/mysql.conf.d/zz-rafeeq.cnf.
+
+[mysqld]
+bind-address = 127.0.0.1
+mysqlx = OFF
+performance_schema = OFF
+innodb_buffer_pool_size = 256M
+max_connections = 30
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
