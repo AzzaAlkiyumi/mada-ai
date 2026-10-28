@@ -23,9 +23,7 @@ export const SendIcon = () => (
 
 export const AttachIcon = () => (
   <svg {...base}>
-    <rect x="3" y="5" width="18" height="14" rx="2" />
-    <circle cx="9" cy="10" r="1.5" />
-    <path d="m21 16-5-5-8 8" />
+    <path d="m21 11.5-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9" />
   </svg>
 )
 
