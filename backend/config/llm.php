@@ -38,6 +38,10 @@ return [
 
     'max_input_chars' => (int) env('LLM_MAX_INPUT_CHARS', 16000),
 
+    // Largest image attachment in kilobytes. The engine needs a vision
+    // projector (llama-server --mmproj) to read images.
+    'max_image_kb' => (int) env('LLM_MAX_IMAGE_KB', 2048),
+
     // Chat messages a user may send per minute.
     'rate_per_minute' => (int) env('LLM_RATE_PER_MINUTE', 10),
 

@@ -31,6 +31,11 @@ MySQL (or the MariaDB that ships with XAMPP).
      (Get-FileHash model-engine\models\Qwen3.5-4B-Q4_K_M.gguf).Hash
      # expected: 00FE7986FF5F6B463E62455821146049DB6F9313603938A70800D1FB69EF11A4
      ```
+   - For image attachments, also download `mmproj-F16.gguf` (672 MB, the
+     vision projector) from the same repository into `model-engine/models/`
+     (sha256 `CD88EDCF8D031894960BB0C9C5B9B7E1FEA6EBEE02B9F7CE925A00D12891F864`).
+     `start-llama.ps1` loads it automatically when the file is there.
+
    A different GGUF model also works: pass `-Model <file> -Alias <name>` to
    `start-llama.ps1` and set the same alias in `LLM_MODEL`.
 
@@ -74,6 +79,7 @@ MySQL (or the MariaDB that ships with XAMPP).
 | `LLM_MAX_TOKENS` | Maximum reply length |
 | `LLM_CONTEXT_MESSAGES` / `LLM_CONTEXT_CHARS` | How much history is sent per request |
 | `LLM_MAX_INPUT_CHARS` | Maximum length of one user message |
+| `LLM_MAX_IMAGE_KB` | Largest image attachment (the browser shrinks photos to 768 px first, which halves the wait on a CPU) |
 | `LLM_TIMEOUT` | Seconds before a reply is abandoned |
 | `LLM_THINKING` | Enable the model's reasoning mode (slower) |
 | `LLM_RATE_PER_MINUTE` | Messages allowed per minute |

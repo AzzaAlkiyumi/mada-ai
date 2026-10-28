@@ -17,6 +17,10 @@ MODEL_FILE="Qwen3.5-4B-Q4_K_M.gguf"
 MODEL_URL="https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/${MODEL_FILE}"
 MODEL_SHA256="00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"
 MODEL_ALIAS="qwen3.5-4b"
+# Vision projector: lets the model read image attachments.
+MMPROJ_FILE="mmproj-F16.gguf"
+MMPROJ_URL="https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/${MMPROJ_FILE}"
+MMPROJ_SHA256="cd88edcf8d031894960bb0c9c5b9b7e1fea6ebee02b9f7ce925a00d12891f864"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG="${HERE}/../config"
@@ -142,6 +146,14 @@ if [[ ! -f "$MODEL_PATH" ]] || ! echo "${MODEL_SHA256}  ${MODEL_PATH}" | sha256s
     echo "${MODEL_SHA256}  ${MODEL_PATH}.part" | sha256sum -c --quiet - || die "Model checksum mismatch."
     mv "${MODEL_PATH}.part" "$MODEL_PATH"
 fi
+
+log "Downloading the vision projector (${MMPROJ_FILE}, about 670 MB)"
+MMPROJ_PATH="/opt/llama/models/${MMPROJ_FILE}"
+if [[ ! -f "$MMPROJ_PATH" ]] || ! echo "${MMPROJ_SHA256}  ${MMPROJ_PATH}" | sha256sum -c --quiet - 2>/dev/null; then
+    curl -fL --retry 3 -C - "$MMPROJ_URL" -o "${MMPROJ_PATH}.part"
+    echo "${MMPROJ_SHA256}  ${MMPROJ_PATH}.part" | sha256sum -c --quiet - || die "Vision projector checksum mismatch."
+    mv "${MMPROJ_PATH}.part" "$MMPROJ_PATH"
+fi
 chown -R root:root /opt/llama
 chmod -R a+rX /opt/llama
 
@@ -150,6 +162,7 @@ umask 027
 cat > /etc/rafeeq/llama.env <<EOF
 LLAMA_API_KEY=${LLM_API_KEY}
 LLAMA_MODEL_FILE=${MODEL_FILE}
+LLAMA_MMPROJ_FILE=${MMPROJ_FILE}
 LLAMA_ALIAS=${MODEL_ALIAS}
 LLAMA_CTX=8192
 LLAMA_THREADS=$(nproc)

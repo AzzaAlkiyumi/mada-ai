@@ -18,5 +18,6 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::delete('/conversations/{conversation}', [ConversationController::class, 'destroy']);
 
     Route::post('/chat', [ChatController::class, 'store'])->middleware('throttle:chat');
+    Route::get('/messages/{message}/image', [ChatController::class, 'image']);
     Route::get('/model/status', [ChatController::class, 'status']);
 });

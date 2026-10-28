@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Message;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class ConversationController extends Controller
 {
@@ -24,7 +26,8 @@ class ConversationController extends Controller
         return response()->json([
             'conversation' => $conversation->only(['id', 'title', 'created_at', 'updated_at']),
             'messages' => $conversation->messages()
-                ->get(['id', 'role', 'content', 'status', 'model', 'completion_tokens', 'duration_ms', 'created_at']),
+                ->get([...Message::PUBLIC_FIELDS, 'image_path'])
+                ->map(fn (Message $message) => $message->toPublicArray()),
         ]);
     }
 
@@ -41,7 +44,11 @@ class ConversationController extends Controller
 
     public function destroy(Request $request, int $conversation): JsonResponse
     {
-        $request->user()->conversations()->findOrFail($conversation)->delete();
+        $conversation = $request->user()->conversations()->findOrFail($conversation);
+        $images = $conversation->messages()->whereNotNull('image_path')->pluck('image_path')->all();
+
+        $conversation->delete();
+        Storage::disk('local')->delete($images);
 
         return response()->json(['ok' => true]);
     }

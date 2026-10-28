@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { messageImageUrl } from '../api.js'
 import { useI18n } from '../i18n.js'
 import { CheckIcon, CopyIcon, Logo } from './Icons.jsx'
 import { useCopy } from '../useCopy.js'
@@ -9,11 +10,19 @@ function MessageItem({ message }) {
   const [copied, copy] = useCopy()
 
   if (message.role === 'user') {
+    const imageSrc = message.image_url || (message.has_image ? messageImageUrl(message.id) : null)
     return (
-      <div className="flex justify-end">
-        <div dir="auto" className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl bg-teal-700 px-4 py-2.5 text-white">
-          {message.content}
-        </div>
+      <div className="flex flex-col items-end gap-1.5">
+        {imageSrc && (
+          <a href={imageSrc} target="_blank" rel="noreferrer">
+            <img src={imageSrc} alt="" loading="lazy" className="max-h-64 max-w-[min(85%,20rem)] rounded-2xl border border-stone-200 object-contain dark:border-stone-800" />
+          </a>
+        )}
+        {message.content && (
+          <div dir="auto" className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl bg-teal-700 px-4 py-2.5 text-white">
+            {message.content}
+          </div>
+        )}
       </div>
     )
   }
@@ -35,7 +44,7 @@ function MessageItem({ message }) {
             <Markdown text={message.content} />
           </div>
         ) : streaming ? (
-          <p className="animate-pulse text-stone-500">{t.thinking}</p>
+          <p className="animate-pulse text-stone-500">{message.readingImage ? t.imageReading : t.thinking}</p>
         ) : null}
 
         {message.status === 'error' && (

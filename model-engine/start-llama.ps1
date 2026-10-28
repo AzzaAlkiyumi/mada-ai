@@ -5,6 +5,8 @@
 param(
     [string]$Model = 'Qwen3.5-4B-Q4_K_M.gguf',
     [string]$Alias = 'qwen3.5-4b',
+    # Vision projector that lets the model read images; skipped if the file is missing.
+    [string]$Mmproj = 'mmproj-F16.gguf',
     [int]$Context = 8192,
     [int]$Threads = 4
 )
@@ -21,8 +23,17 @@ if (-not $line) {
 # Passed by environment variable so the key does not show in the process list.
 $env:LLAMA_API_KEY = $line.Matches[0].Groups[1].Value.Trim()
 
+$vision = @()
+$mmprojPath = Join-Path $root "models\$Mmproj"
+if (Test-Path $mmprojPath) {
+    $vision = @('--mmproj', $mmprojPath)
+} else {
+    Write-Warning "$Mmproj not found in models\; image attachments will not work."
+}
+
 & (Join-Path $root 'llama\llama-server.exe') `
     --model (Join-Path $root "models\$Model") `
+    @vision `
     --alias $Alias `
     --host 127.0.0.1 `
     --port 8080 `

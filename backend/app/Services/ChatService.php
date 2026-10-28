@@ -6,6 +6,7 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Services\Llm\LlmClient;
 use App\Services\Llm\LlmException;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ChatService
@@ -56,23 +57,32 @@ class ChatService
     /**
      * The system prompt plus as much recent history as the limits allow.
      *
-     * @return array<int, array{role: string, content: string}>
+     * Only the newest message sends its image to the model; reading an image
+     * is slow on a CPU, so older images appear as an "[image]" note.
+     *
+     * @return array<int, array{role: string, content: string|array}>
      */
     public function buildContext(Conversation $conversation, Message $assistant): array
     {
         $history = $conversation->messages()
             ->where('id', '<', $assistant->id)
-            ->where('content', '!=', '')
+            ->where(fn ($q) => $q->where('content', '!=', '')->orWhereNotNull('image_path'))
             ->where(fn ($q) => $q->where('role', Message::ROLE_USER)->orWhere('status', '!=', Message::STATUS_ERROR))
             ->reorder('id', 'desc')
             ->limit(config('llm.context_messages'))
-            ->get(['role', 'content']);
+            ->get(['role', 'content', 'image_path', 'image_mime']);
 
         $budget = config('llm.context_chars');
         $kept = [];
 
         foreach ($history as $message) {
-            $length = mb_strlen($message->content);
+            $text = $message->content;
+
+            if ($message->image_path !== null && $kept !== []) {
+                $text = trim("[image]\n".$text);
+            }
+
+            $length = mb_strlen($text);
 
             // Always keep the newest message, even when it alone exceeds the budget.
             if ($kept !== [] && $length > $budget) {
@@ -80,10 +90,30 @@ class ChatService
             }
 
             $budget -= $length;
-            array_unshift($kept, ['role' => $message->role, 'content' => $message->content]);
+            $content = $kept === [] && $message->image_path !== null ? $this->withImage($message) : $text;
+            array_unshift($kept, ['role' => $message->role, 'content' => $content]);
         }
 
         return [['role' => 'system', 'content' => config('llm.system_prompt')], ...$kept];
+    }
+
+    /**
+     * OpenAI-style multipart content: the text (if any) and the image as a data URL.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function withImage(Message $message): array
+    {
+        $parts = [];
+
+        if ($message->content !== '') {
+            $parts[] = ['type' => 'text', 'text' => $message->content];
+        }
+
+        $data = base64_encode(Storage::disk('local')->get($message->image_path));
+        $parts[] = ['type' => 'image_url', 'image_url' => ['url' => "data:{$message->image_mime};base64,{$data}"]];
+
+        return $parts;
     }
 
     private function titleFrom(string $message): string

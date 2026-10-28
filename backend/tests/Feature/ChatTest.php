@@ -9,6 +9,8 @@ use App\Services\Llm\ChatResult;
 use App\Services\Llm\LlmClient;
 use App\Services\Llm\LlmException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -130,6 +132,75 @@ class ChatTest extends TestCase
         $this->actingAs($other)->deleteJson("/api/conversations/{$conversation->id}")->assertNotFound();
         $this->actingAs($other)->postJson('/api/chat', ['conversation_id' => $conversation->id, 'content' => 'x'])->assertNotFound();
         $this->actingAs($other)->getJson('/api/conversations')->assertJsonCount(0, 'conversations');
+    }
+
+    public function test_image_is_saved_and_sent_to_the_model(): void
+    {
+        Storage::fake('local');
+        $user = User::factory()->create();
+        $this->app->instance(LlmClient::class, $llm = new ScriptedLlm(['a cat']));
+
+        $events = $this->events($this->actingAs($user)->post('/api/chat', [
+            'content' => 'What is this?',
+            'image' => UploadedFile::fake()->image('cat.jpg', 64, 64),
+        ])->streamedContent());
+
+        $this->assertSame(['meta', 'delta', 'done'], array_column($events, 0));
+        $this->assertTrue($events[0][1]['user_message']['has_image']);
+        $this->assertArrayNotHasKey('image_path', $events[0][1]['user_message']);
+
+        $message = Message::where('role', 'user')->sole();
+        Storage::disk('local')->assertExists($message->image_path);
+        $this->assertSame('image/jpeg', $message->image_mime);
+
+        $content = end($llm->received)['content'];
+        $this->assertSame(['type' => 'text', 'text' => 'What is this?'], $content[0]);
+        $this->assertSame('image_url', $content[1]['type']);
+        $this->assertStringStartsWith('data:image/jpeg;base64,', $content[1]['image_url']['url']);
+
+        $this->actingAs($user)->get("/api/messages/{$message->id}/image")
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/jpeg');
+    }
+
+    public function test_image_alone_is_a_valid_message_and_older_images_become_notes(): void
+    {
+        Storage::fake('local');
+        $user = User::factory()->create();
+        $this->app->instance(LlmClient::class, $llm = new ScriptedLlm(['ok']));
+
+        $this->actingAs($user)->post('/api/chat', ['image' => UploadedFile::fake()->image('a.png', 32, 32)])->streamedContent();
+        $conversation = Conversation::sole();
+        $this->assertSame('Image', $conversation->title);
+        $this->assertCount(1, end($llm->received)['content']);
+
+        $this->actingAs($user)->post('/api/chat', ['conversation_id' => $conversation->id, 'content' => 'and now?'])->streamedContent();
+
+        $this->assertSame(
+            [['user', '[image]'], ['assistant', 'ok'], ['user', 'and now?']],
+            array_map(fn ($m) => [$m['role'], $m['content']], array_slice($llm->received, 1)),
+        );
+    }
+
+    public function test_image_rules_and_privacy(): void
+    {
+        Storage::fake('local');
+        $owner = User::factory()->create();
+        $other = User::factory()->create();
+        $this->app->instance(LlmClient::class, new ScriptedLlm(['x']));
+
+        $this->actingAs($owner)->postJson('/api/chat', ['image' => UploadedFile::fake()->create('notes.pdf', 10, 'application/pdf')])
+            ->assertJsonValidationErrors('image');
+        $this->actingAs($owner)->postJson('/api/chat', ['content' => ''])
+            ->assertJsonValidationErrors('content');
+
+        $this->actingAs($owner)->post('/api/chat', ['image' => UploadedFile::fake()->image('a.png')])->streamedContent();
+        $message = Message::where('role', 'user')->sole();
+
+        $this->actingAs($other)->getJson("/api/messages/{$message->id}/image")->assertNotFound();
+
+        $this->actingAs($owner)->deleteJson("/api/conversations/{$message->conversation_id}")->assertOk();
+        Storage::disk('local')->assertMissing($message->image_path);
     }
 
     public function test_conversation_can_be_listed_renamed_and_deleted(): void

@@ -6,9 +6,12 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['role', 'content', 'status', 'model', 'prompt_tokens', 'completion_tokens', 'duration_ms'])]
+#[Fillable(['role', 'content', 'image_path', 'image_mime', 'status', 'model', 'prompt_tokens', 'completion_tokens', 'duration_ms'])]
 class Message extends Model
 {
+    /** Columns returned to the browser; image_path stays on the server. */
+    public const PUBLIC_FIELDS = ['id', 'role', 'content', 'status', 'model', 'completion_tokens', 'duration_ms', 'created_at'];
+
     public const ROLE_USER = 'user';
 
     public const ROLE_ASSISTANT = 'assistant';
@@ -24,5 +27,13 @@ class Message extends Model
     public function conversation(): BelongsTo
     {
         return $this->belongsTo(Conversation::class);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toPublicArray(): array
+    {
+        return [...$this->only(self::PUBLIC_FIELDS), 'has_image' => $this->image_path !== null];
     }
 }

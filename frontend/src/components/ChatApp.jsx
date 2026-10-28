@@ -31,7 +31,7 @@ export default function ChatApp({ user, onSignedOut, settings }) {
         return t.errorSession
       }
       if (err.status === 429) return t.errorRate
-      if (err.status === 422) return err.errors?.content?.[0] || t.errorTooLong
+      if (err.status === 422) return err.errors?.image?.[0] || err.errors?.content?.[0] || t.errorTooLong
       return err.message || t.errorGeneric
     },
     [onSignedOut, t],
@@ -128,17 +128,19 @@ export default function ChatApp({ user, onSignedOut, settings }) {
     }
   }
 
-  const send = async (content) => {
+  const send = async (content, image) => {
     setNotice('')
     stickToBottom.current = true
 
+    const userKey = nextTempId()
     const assistantKey = nextTempId()
     const updateAssistant = (fn) => setMessages((list) => list.map((m) => (m.key === assistantKey ? { ...m, ...fn(m) } : m)))
 
     setMessages((list) => [
       ...list,
-      { id: nextTempId(), role: 'user', content },
-      { id: assistantKey, key: assistantKey, role: 'assistant', content: '', status: 'streaming' },
+      // image_url is the local preview; after a reload the image comes from the server.
+      { id: userKey, key: userKey, role: 'user', content, image_url: image?.url },
+      { id: assistantKey, key: assistantKey, role: 'assistant', content: '', status: 'streaming', readingImage: !!image },
     ])
 
     const controller = new AbortController()
@@ -160,10 +162,12 @@ export default function ChatApp({ user, onSignedOut, settings }) {
       await streamChat({
         conversationId: activeId,
         content,
+        image: image?.blob,
         signal: controller.signal,
-        onMeta: ({ conversation, assistant_message_id }) => {
+        onMeta: ({ conversation, user_message, assistant_message_id }) => {
           setActiveId(conversation.id)
           setConversations((list) => [conversation, ...list.filter((c) => c.id !== conversation.id)])
+          setMessages((list) => list.map((m) => (m.key === userKey ? { ...m, ...user_message } : m)))
           updateAssistant(() => ({ id: assistant_message_id }))
         },
         onDelta: (text) => {

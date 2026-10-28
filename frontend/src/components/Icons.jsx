@@ -21,6 +21,20 @@ export const SendIcon = () => (
   </svg>
 )
 
+export const AttachIcon = () => (
+  <svg {...base}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <circle cx="9" cy="10" r="1.5" />
+    <path d="m21 16-5-5-8 8" />
+  </svg>
+)
+
+export const CloseIcon = () => (
+  <svg {...base} width={14} height={14}>
+    <path d="M6 6l12 12M18 6 6 18" />
+  </svg>
+)
+
 export const StopIcon = () => (
   <svg {...base}>
     <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />

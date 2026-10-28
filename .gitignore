@@ -4,3 +4,6 @@
 
 # Release archives (built by deploy/package-release.ps1)
 /rafeeq-release.tar.gz
+
+# Local editor/agent settings
+/.claude/

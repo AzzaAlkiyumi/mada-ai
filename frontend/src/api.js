@@ -66,18 +66,33 @@ export const api = {
   modelStatus: () => request('GET', '/model/status'),
 }
 
+export const messageImageUrl = (id) => `/api/messages/${id}/image`
+
 /**
  * Send a message and read the reply as server-sent events.
  * Handlers: onMeta, onDelta, onDone, onError. Pass an AbortSignal to stop.
  */
-export async function streamChat({ conversationId, content, signal, onMeta, onDelta, onDone, onError }) {
+export async function streamChat({ conversationId, content, image, signal, onMeta, onDelta, onDone, onError }) {
   await ensureCsrfCookie()
+
+  // With an image the request is multipart; the browser sets its Content-Type.
+  const requestHeaders = headers({ Accept: 'text/event-stream' })
+  let body
+  if (image) {
+    body = new FormData()
+    if (conversationId) body.append('conversation_id', conversationId)
+    if (content) body.append('content', content)
+    body.append('image', image, 'image.jpg')
+    delete requestHeaders['Content-Type']
+  } else {
+    body = JSON.stringify({ conversation_id: conversationId ?? null, content })
+  }
 
   const response = await fetch('/api/chat', {
     method: 'POST',
     credentials: 'same-origin',
-    headers: headers({ Accept: 'text/event-stream' }),
-    body: JSON.stringify({ conversation_id: conversationId ?? null, content }),
+    headers: requestHeaders,
+    body,
     signal,
   })
 
