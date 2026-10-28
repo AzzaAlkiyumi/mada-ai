@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, streamChat } from '../api.js'
+import { api, streamChat, streamEdit, streamRegenerate } from '../api.js'
 import { useI18n } from '../i18n.js'
 import Composer from './Composer.jsx'
 import { Logo, MenuIcon } from './Icons.jsx'
+import InstructionsDialog from './InstructionsDialog.jsx'
 import MessageItem from './MessageItem.jsx'
 import Sidebar from './Sidebar.jsx'
 
@@ -19,6 +20,9 @@ export default function ChatApp({ user, onSignedOut, settings }) {
   const [notice, setNotice] = useState('')
   const [modelOnline, setModelOnline] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [instructions, setInstructions] = useState(user.instructions ?? '')
+  const [instructionsOpen, setInstructionsOpen] = useState(false)
 
   const abortRef = useRef(null)
   const scrollRef = useRef(null)
@@ -31,7 +35,7 @@ export default function ChatApp({ user, onSignedOut, settings }) {
         return t.errorSession
       }
       if (err.status === 429) return t.errorRate
-      if (err.status === 422) return err.errors?.image?.[0] || err.errors?.content?.[0] || t.errorTooLong
+      if (err.status === 422) return err.errors?.file?.[0] || err.errors?.image?.[0] || err.errors?.content?.[0] || t.errorTooLong
       return err.message || t.errorGeneric
     },
     [onSignedOut, t],
@@ -39,14 +43,16 @@ export default function ChatApp({ user, onSignedOut, settings }) {
 
   const refreshConversations = useCallback(() => {
     api
-      .conversations()
+      .conversations(search.trim())
       .then((data) => setConversations(data.conversations))
       .catch((err) => setNotice(handleError(err)))
-  }, [handleError])
+  }, [handleError, search])
 
+  // Wait for a pause in typing before searching.
   useEffect(() => {
-    refreshConversations()
-  }, [refreshConversations])
+    const timer = setTimeout(refreshConversations, search ? 300 : 0)
+    return () => clearTimeout(timer)
+  }, [refreshConversations, search])
 
   useEffect(() => {
     const check = () =>
@@ -128,19 +134,22 @@ export default function ChatApp({ user, onSignedOut, settings }) {
     }
   }
 
-  const send = async (content, image) => {
+  /**
+   * Show the user's message (if any) and a reply placeholder after the messages
+   * `keep` leaves, then stream the reply that `start` requests.
+   */
+  const runReply = async ({ keep, userMessage, readingImage, start }) => {
     setNotice('')
     stickToBottom.current = true
 
-    const userKey = nextTempId()
+    const userKey = userMessage?.key
     const assistantKey = nextTempId()
     const updateAssistant = (fn) => setMessages((list) => list.map((m) => (m.key === assistantKey ? { ...m, ...fn(m) } : m)))
 
     setMessages((list) => [
-      ...list,
-      // image_url is the local preview; after a reload the image comes from the server.
-      { id: userKey, key: userKey, role: 'user', content, image_url: image?.url },
-      { id: assistantKey, key: assistantKey, role: 'assistant', content: '', status: 'streaming', readingImage: !!image },
+      ...keep(list),
+      ...(userMessage ? [userMessage] : []),
+      { id: assistantKey, key: assistantKey, role: 'assistant', content: '', status: 'streaming', readingImage },
     ])
 
     const controller = new AbortController()
@@ -159,16 +168,14 @@ export default function ChatApp({ user, onSignedOut, settings }) {
     }
 
     try {
-      await streamChat({
-        conversationId: activeId,
-        content,
-        image: image?.blob,
+      await start({
         signal: controller.signal,
-        onMeta: ({ conversation, user_message, assistant_message_id }) => {
+        onMeta: ({ conversation, user_message, assistant_message_id, file_truncated }) => {
           setActiveId(conversation.id)
           setConversations((list) => [conversation, ...list.filter((c) => c.id !== conversation.id)])
-          setMessages((list) => list.map((m) => (m.key === userKey ? { ...m, ...user_message } : m)))
+          if (userKey) setMessages((list) => list.map((m) => (m.key === userKey ? { ...m, ...user_message } : m)))
           updateAssistant(() => ({ id: assistant_message_id }))
+          if (file_truncated) setNotice(t.fileTruncated)
         },
         onDelta: (text) => {
           pending += text
@@ -201,6 +208,49 @@ export default function ChatApp({ user, onSignedOut, settings }) {
     }
   }
 
+  const send = (content, attachment) => {
+    const key = nextTempId()
+    const image = attachment?.kind === 'image' ? attachment : null
+    const file = attachment?.kind === 'file' ? attachment.file : null
+
+    return runReply({
+      keep: (list) => list,
+      // image_url is the local preview; after a reload the image comes from the server.
+      userMessage: { id: key, key, role: 'user', content, image_url: image?.url, file_name: file?.name },
+      readingImage: !!image,
+      start: (handlers) => streamChat({ conversationId: activeId, content, image: image?.blob, file, ...handlers }),
+    })
+  }
+
+  const editMessage = (message, content) => {
+    const index = messages.findIndex((m) => m.id === message.id)
+    return runReply({
+      keep: (list) => list.slice(0, index),
+      userMessage: { ...message, key: nextTempId(), content },
+      readingImage: !!(message.has_image || message.image_url),
+      start: (handlers) => streamEdit(message.id, content, handlers),
+    })
+  }
+
+  const regenerate = (reply) => {
+    const index = messages.findIndex((m) => m.id === reply.id)
+    const question = messages.slice(0, index).findLast((m) => m.role === 'user')
+    return runReply({
+      keep: (list) => list.slice(0, index),
+      readingImage: !!(question?.has_image || question?.image_url),
+      start: (handlers) => streamRegenerate(reply.id, handlers),
+    })
+  }
+
+  const saveInstructions = async (text) => {
+    const data = await api.updateInstructions(text)
+    setInstructions(data.user.instructions)
+    setInstructionsOpen(false)
+  }
+
+  // Edit and regenerate need saved messages, and only the last reply can be regenerated.
+  const lastReplyId = messages.findLast((m) => m.role === 'assistant')?.id
+
   const activeTitle = conversations.find((c) => c.id === activeId)?.title
 
   return (
@@ -217,6 +267,12 @@ export default function ChatApp({ user, onSignedOut, settings }) {
         onSelect={openConversation}
         onRename={renameConversation}
         onDelete={deleteConversation}
+        search={search}
+        onSearch={setSearch}
+        onOpenInstructions={() => {
+          setInstructionsOpen(true)
+          setSidebarOpen(false)
+        }}
         onSignOut={signOut}
       />
 
@@ -243,7 +299,14 @@ export default function ChatApp({ user, onSignedOut, settings }) {
             )}
 
             {messages.map((m) => (
-              <MessageItem key={m.key ?? m.id} message={m} />
+              <MessageItem
+                key={m.key ?? m.id}
+                message={m}
+                busy={streaming || typeof m.id !== 'number'}
+                canRegenerate={m.id === lastReplyId}
+                onEdit={editMessage}
+                onRegenerate={regenerate}
+              />
             ))}
 
             {notice && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">{notice}</p>}
@@ -252,6 +315,8 @@ export default function ChatApp({ user, onSignedOut, settings }) {
 
         <Composer streaming={streaming} onSend={send} onStop={stop} />
       </main>
+
+      {instructionsOpen && <InstructionsDialog initial={instructions} onSave={saveInstructions} onClose={() => setInstructionsOpen(false)} />}
     </div>
   )
 }

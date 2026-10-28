@@ -6,11 +6,11 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['role', 'content', 'image_path', 'image_mime', 'status', 'model', 'prompt_tokens', 'completion_tokens', 'duration_ms'])]
+#[Fillable(['role', 'content', 'image_path', 'image_mime', 'file_name', 'file_text', 'status', 'model', 'prompt_tokens', 'completion_tokens', 'duration_ms'])]
 class Message extends Model
 {
-    /** Columns returned to the browser; image_path stays on the server. */
-    public const PUBLIC_FIELDS = ['id', 'role', 'content', 'status', 'model', 'completion_tokens', 'duration_ms', 'created_at'];
+    /** Columns returned to the browser; image_path and file_text stay on the server. */
+    public const PUBLIC_FIELDS = ['id', 'role', 'content', 'file_name', 'status', 'model', 'completion_tokens', 'duration_ms', 'created_at'];
 
     public const ROLE_USER = 'user';
 

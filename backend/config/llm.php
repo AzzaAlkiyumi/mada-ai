@@ -42,6 +42,15 @@ return [
     // projector (llama-server --mmproj) to read images.
     'max_image_kb' => (int) env('LLM_MAX_IMAGE_KB', 2048),
 
+    // Attached documents (PDF, .docx, .txt, .md, .csv): largest upload in
+    // kilobytes, and how much of their text is kept and sent to the model.
+    'max_file_kb' => (int) env('LLM_MAX_FILE_KB', 2048),
+
+    'max_file_chars' => (int) env('LLM_MAX_FILE_CHARS', 10000),
+
+    // Length limit for the user's personal instructions.
+    'max_instructions_chars' => 2000,
+
     // Chat messages a user may send per minute.
     'rate_per_minute' => (int) env('LLM_RATE_PER_MINUTE', 10),
 

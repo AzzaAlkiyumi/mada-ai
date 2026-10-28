@@ -66,17 +66,22 @@ class ChatService
     {
         $history = $conversation->messages()
             ->where('id', '<', $assistant->id)
-            ->where(fn ($q) => $q->where('content', '!=', '')->orWhereNotNull('image_path'))
+            ->where(fn ($q) => $q->where('content', '!=', '')->orWhereNotNull('image_path')->orWhereNotNull('file_name'))
             ->where(fn ($q) => $q->where('role', Message::ROLE_USER)->orWhere('status', '!=', Message::STATUS_ERROR))
             ->reorder('id', 'desc')
             ->limit(config('llm.context_messages'))
-            ->get(['role', 'content', 'image_path', 'image_mime']);
+            ->get(['role', 'content', 'image_path', 'image_mime', 'file_name', 'file_text']);
 
         $budget = config('llm.context_chars');
         $kept = [];
 
         foreach ($history as $message) {
             $text = $message->content;
+
+            // Document text travels with every request, so follow-up questions can use it.
+            if ($message->file_name !== null) {
+                $text = trim("[File: {$message->file_name}]\n<document>\n{$message->file_text}\n</document>\n\n".$text);
+            }
 
             if ($message->image_path !== null && $kept !== []) {
                 $text = trim("[image]\n".$text);
@@ -94,7 +99,28 @@ class ChatService
             array_unshift($kept, ['role' => $message->role, 'content' => $content]);
         }
 
-        return [['role' => 'system', 'content' => config('llm.system_prompt')], ...$kept];
+        return [['role' => 'system', 'content' => $this->systemPrompt($conversation)], ...$kept];
+    }
+
+    /**
+     * Delete every message after $message in its conversation, with their images.
+     */
+    public function discardAfter(Message $message): void
+    {
+        $later = Message::where('conversation_id', $message->conversation_id)->where('id', '>', $message->id);
+
+        Storage::disk('local')->delete((clone $later)->whereNotNull('image_path')->pluck('image_path')->all());
+        $later->delete();
+    }
+
+    private function systemPrompt(Conversation $conversation): string
+    {
+        $prompt = config('llm.system_prompt');
+        $instructions = trim((string) $conversation->user()->value('instructions'));
+
+        return $instructions === ''
+            ? $prompt
+            : $prompt."\n\nThe user's personal instructions (follow them unless they conflict with the rules above):\n".$instructions;
     }
 
     /**

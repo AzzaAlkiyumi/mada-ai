@@ -66,6 +66,34 @@ export const EditIcon = () => (
   </svg>
 )
 
+export const SearchIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.5-3.5" />
+  </svg>
+)
+
+export const SettingsIcon = () => (
+  <svg {...base}>
+    <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+    <circle cx="16" cy="7" r="2" />
+    <circle cx="10" cy="17" r="2" />
+  </svg>
+)
+
+export const RetryIcon = () => (
+  <svg {...base} width={15} height={15}>
+    <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />
+  </svg>
+)
+
+export const FileIcon = () => (
+  <svg {...base}>
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+    <path d="M14 3v5h5M9 13h6M9 17h4" />
+  </svg>
+)
+
 export const MenuIcon = () => (
   <svg {...base}>
     <path d="M4 6h16M4 12h16M4 18h16" />

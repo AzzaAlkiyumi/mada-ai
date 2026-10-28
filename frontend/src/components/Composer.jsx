@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../i18n.js'
 import { ACCEPTED_IMAGES, resizeImage } from '../resizeImage.js'
-import { AttachIcon, CloseIcon, SendIcon, StopIcon } from './Icons.jsx'
+import { AttachIcon, CloseIcon, FileIcon, SendIcon, StopIcon } from './Icons.jsx'
+
+const ACCEPTED_FILES = '.pdf,.docx,.txt,.md,.csv'
+const MAX_FILE_BYTES = 2 * 1024 * 1024
 
 export default function Composer({ streaming, onSend, onStop, maxLength = 16000 }) {
   const { t } = useI18n()
   const [text, setText] = useState('')
-  const [image, setImage] = useState(null) // { blob, url }
-  const [imageError, setImageError] = useState('')
+  // { kind: 'image', blob, url } or { kind: 'file', file }
+  const [attachment, setAttachment] = useState(null)
+  const [attachError, setAttachError] = useState('')
   const ref = useRef(null)
   const fileRef = useRef(null)
 
@@ -19,32 +23,40 @@ export default function Composer({ streaming, onSend, onStop, maxLength = 16000 
     el.style.height = `${Math.min(el.scrollHeight, 240)}px`
   }, [text])
 
-  const pickImage = async (e) => {
+  const removeAttachment = () => {
+    if (attachment?.url) URL.revokeObjectURL(attachment.url)
+    setAttachment(null)
+  }
+
+  const pick = async (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    setImageError('')
+    removeAttachment()
+    setAttachError('')
+
+    if (!file.type.startsWith('image/')) {
+      if (file.size > MAX_FILE_BYTES) setAttachError(t.fileTooBig)
+      else setAttachment({ kind: 'file', file })
+      return
+    }
+
     try {
       const blob = await resizeImage(file)
-      setImage({ blob, url: URL.createObjectURL(blob) })
+      setAttachment({ kind: 'image', blob, url: URL.createObjectURL(blob) })
     } catch {
-      setImageError(t.errorImage)
+      setAttachError(t.errorImage)
     }
-  }
-
-  const removeImage = () => {
-    if (image) URL.revokeObjectURL(image.url)
-    setImage(null)
   }
 
   const submit = () => {
     const value = text.trim()
-    if ((!value && !image) || streaming) return
-    // The preview URL now belongs to the sent message, so it is not revoked here.
-    onSend(value, image)
+    if ((!value && !attachment) || streaming) return
+    // An image preview URL now belongs to the sent message, so it is not revoked here.
+    onSend(value, attachment)
     setText('')
-    setImage(null)
-    setImageError('')
+    setAttachment(null)
+    setAttachError('')
   }
 
   const onKeyDown = (e) => {
@@ -57,11 +69,20 @@ export default function Composer({ streaming, onSend, onStop, maxLength = 16000 
   return (
     <div className="border-t border-stone-200 bg-white/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur dark:border-stone-800 dark:bg-stone-950/90">
       <div className="mx-auto max-w-3xl rounded-2xl border border-stone-300 bg-white p-2 focus-within:border-teal-600 dark:border-stone-700 dark:bg-stone-900">
-        {image && (
+        {attachment && (
           <div className="relative mb-2 ms-1 inline-block">
-            <img src={image.url} alt="" className="h-20 w-20 rounded-lg object-cover" />
+            {attachment.kind === 'image' ? (
+              <img src={attachment.url} alt="" className="h-20 w-20 rounded-lg object-cover" />
+            ) : (
+              <div className="flex max-w-64 items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 py-2 pe-4 ps-2 text-sm dark:border-stone-700 dark:bg-stone-800">
+                <FileIcon />
+                <span className="truncate" dir="auto">
+                  {attachment.file.name}
+                </span>
+              </div>
+            )}
             <button
-              onClick={removeImage}
+              onClick={removeAttachment}
               aria-label={t.removeImage}
               title={t.removeImage}
               className="absolute -end-2 -top-2 rounded-full bg-stone-800 p-1 text-white hover:bg-stone-700 dark:bg-stone-200 dark:text-stone-900"
@@ -70,10 +91,10 @@ export default function Composer({ streaming, onSend, onStop, maxLength = 16000 
             </button>
           </div>
         )}
-        {imageError && <p className="mb-2 px-2 text-sm text-red-600 dark:text-red-400">{imageError}</p>}
+        {attachError && <p className="mb-2 px-2 text-sm text-red-600 dark:text-red-400">{attachError}</p>}
 
         <div className="flex items-end gap-2">
-          <input ref={fileRef} type="file" accept={ACCEPTED_IMAGES} onChange={pickImage} className="hidden" />
+          <input ref={fileRef} type="file" accept={`${ACCEPTED_IMAGES},${ACCEPTED_FILES}`} onChange={pick} className="hidden" />
           <button
             onClick={() => fileRef.current?.click()}
             disabled={streaming}
@@ -99,7 +120,7 @@ export default function Composer({ streaming, onSend, onStop, maxLength = 16000 
               <StopIcon />
             </button>
           ) : (
-            <button onClick={submit} disabled={!text.trim() && !image} aria-label={t.send} title={t.send} className="rounded-xl bg-teal-700 p-2.5 text-white hover:bg-teal-800 disabled:opacity-40">
+            <button onClick={submit} disabled={!text.trim() && !attachment} aria-label={t.send} title={t.send} className="rounded-xl bg-teal-700 p-2.5 text-white hover:bg-teal-800 disabled:opacity-40">
               <SendIcon />
             </button>
           )}

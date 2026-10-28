@@ -80,6 +80,7 @@ MySQL (or the MariaDB that ships with XAMPP).
 | `LLM_CONTEXT_MESSAGES` / `LLM_CONTEXT_CHARS` | How much history is sent per request |
 | `LLM_MAX_INPUT_CHARS` | Maximum length of one user message |
 | `LLM_MAX_IMAGE_KB` | Largest image attachment (the browser shrinks photos to 768 px first, which halves the wait on a CPU) |
+| `LLM_MAX_FILE_KB` / `LLM_MAX_FILE_CHARS` | Largest attached document (PDF, .docx, .txt, .md, .csv) and how much of its text is kept |
 | `LLM_TIMEOUT` | Seconds before a reply is abandoned |
 | `LLM_THINKING` | Enable the model's reasoning mode (slower) |
 | `LLM_RATE_PER_MINUTE` | Messages allowed per minute |

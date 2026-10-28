@@ -42,8 +42,23 @@ class AuthController extends Controller
         return response()->json(['user' => $this->present($request->user())]);
     }
 
+    /**
+     * Save the personal instructions that are added to every chat.
+     */
+    public function updateInstructions(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'instructions' => ['nullable', 'string', 'max:'.config('llm.max_instructions_chars')],
+        ]);
+
+        $instructions = trim($data['instructions'] ?? '');
+        $request->user()->update(['instructions' => $instructions !== '' ? $instructions : null]);
+
+        return response()->json(['user' => $this->present($request->user())]);
+    }
+
     private function present($user): array
     {
-        return ['id' => $user->id, 'name' => $user->name, 'email' => $user->email];
+        return ['id' => $user->id, 'name' => $user->name, 'email' => $user->email, 'instructions' => $user->instructions ?? ''];
     }
 }

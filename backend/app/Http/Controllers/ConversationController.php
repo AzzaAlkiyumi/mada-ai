@@ -11,7 +11,17 @@ class ConversationController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $search = trim((string) $request->query('q', ''));
+
         $conversations = $request->user()->conversations()
+            // Search titles, message text and attached file names.
+            ->when($search !== '', function ($query) use ($search) {
+                $like = '%'.addcslashes(mb_substr($search, 0, 100), '\\%_').'%';
+
+                $query->where(fn ($q) => $q
+                    ->where('title', 'like', $like)
+                    ->orWhereHas('messages', fn ($m) => $m->where('content', 'like', $like)->orWhere('file_name', 'like', $like)));
+            })
             ->latest('updated_at')
             ->limit(200)
             ->get(['id', 'title', 'created_at', 'updated_at']);

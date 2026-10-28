@@ -11,6 +11,7 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:lo
 Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::put('/me/instructions', [AuthController::class, 'updateInstructions']);
 
     Route::get('/conversations', [ConversationController::class, 'index']);
     Route::get('/conversations/{conversation}', [ConversationController::class, 'show']);
@@ -18,6 +19,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::delete('/conversations/{conversation}', [ConversationController::class, 'destroy']);
 
     Route::post('/chat', [ChatController::class, 'store'])->middleware('throttle:chat');
+    Route::post('/messages/{message}/edit', [ChatController::class, 'edit'])->middleware('throttle:chat');
+    Route::post('/messages/{message}/regenerate', [ChatController::class, 'regenerate'])->middleware('throttle:chat');
     Route::get('/messages/{message}/image', [ChatController::class, 'image']);
     Route::get('/model/status', [ChatController::class, 'status']);
 });

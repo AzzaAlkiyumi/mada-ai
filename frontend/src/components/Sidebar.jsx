@@ -1,7 +1,7 @@
 import { useI18n } from '../i18n.js'
-import { EditIcon, Logo, LogoutIcon, MoonIcon, PlusIcon, SunIcon, TrashIcon } from './Icons.jsx'
+import { EditIcon, Logo, LogoutIcon, MoonIcon, PlusIcon, SearchIcon, SettingsIcon, SunIcon, TrashIcon } from './Icons.jsx'
 
-export default function Sidebar({ open, onClose, user, conversations, activeId, modelOnline, settings, onNew, onSelect, onRename, onDelete, onSignOut }) {
+export default function Sidebar({ open, onClose, user, conversations, activeId, modelOnline, settings, onNew, onSelect, onRename, onDelete, onSignOut, search, onSearch, onOpenInstructions }) {
   const { t } = useI18n()
 
   return (
@@ -21,11 +21,25 @@ export default function Sidebar({ open, onClose, user, conversations, activeId, 
             <PlusIcon />
             {t.newChat}
           </button>
+          <label className="relative mt-2 block">
+            <span className="pointer-events-none absolute inset-y-0 start-2.5 flex items-center text-stone-400">
+              <SearchIcon />
+            </span>
+            <input
+              type="search"
+              dir="auto"
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+              placeholder={t.search}
+              aria-label={t.search}
+              className="w-full rounded-lg border border-stone-300 bg-white py-1.5 pe-2 ps-8 text-sm outline-none placeholder:text-stone-400 focus:border-teal-600 dark:border-stone-700 dark:bg-stone-950"
+            />
+          </label>
         </div>
 
         <nav className="mt-4 flex-1 overflow-y-auto px-2" aria-label={t.history}>
           <p className="px-2 pb-1 text-xs font-medium text-stone-500">{t.history}</p>
-          {conversations.length === 0 && <p className="px-2 py-2 text-sm text-stone-500">{t.noConversations}</p>}
+          {conversations.length === 0 && <p className="px-2 py-2 text-sm text-stone-500">{search.trim() ? t.noResults : t.noConversations}</p>}
           <ul className="space-y-0.5">
             {conversations.map((c) => (
               <li key={c.id} className="group relative">
@@ -60,6 +74,9 @@ export default function Sidebar({ open, onClose, user, conversations, activeId, 
             <span className="flex-1 truncate px-1 text-stone-600 dark:text-stone-400" dir="ltr">
               {user.email}
             </span>
+            <button onClick={onOpenInstructions} aria-label={t.instructions} title={t.instructions} className="rounded-lg p-1.5 hover:bg-stone-200 dark:hover:bg-stone-800">
+              <SettingsIcon />
+            </button>
             <button onClick={settings.toggleLang} className="rounded-lg px-2 py-1.5 text-xs hover:bg-stone-200 dark:hover:bg-stone-800">
               {t.language}
             </button>

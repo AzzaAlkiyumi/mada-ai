@@ -59,7 +59,8 @@ export const api = {
   me: () => request('GET', '/me'),
   login: (email, password, remember) => request('POST', '/login', { email, password, remember }),
   logout: () => request('POST', '/logout'),
-  conversations: () => request('GET', '/conversations'),
+  updateInstructions: (instructions) => request('PUT', '/me/instructions', { instructions }),
+  conversations: (search = '') => request('GET', `/conversations${search ? `?q=${encodeURIComponent(search)}` : ''}`),
   conversation: (id) => request('GET', `/conversations/${id}`),
   renameConversation: (id, title) => request('PATCH', `/conversations/${id}`, { title }),
   deleteConversation: (id) => request('DELETE', `/conversations/${id}`),
@@ -69,30 +70,42 @@ export const api = {
 export const messageImageUrl = (id) => `/api/messages/${id}/image`
 
 /**
- * Send a message and read the reply as server-sent events.
+ * Send a message and read the reply as server-sent events. A message may
+ * carry one attachment: an image (Blob) or a document (File).
  * Handlers: onMeta, onDelta, onDone, onError. Pass an AbortSignal to stop.
  */
-export async function streamChat({ conversationId, content, image, signal, onMeta, onDelta, onDone, onError }) {
+export function streamChat({ conversationId, content, image, file, ...handlers }) {
+  // With an attachment the request is multipart.
+  if (image || file) {
+    const form = new FormData()
+    if (conversationId) form.append('conversation_id', conversationId)
+    if (content) form.append('content', content)
+    if (image) form.append('image', image, 'image.jpg')
+    if (file) form.append('file', file, file.name)
+    return streamRequest('/chat', form, handlers)
+  }
+  return streamRequest('/chat', { conversation_id: conversationId ?? null, content }, handlers)
+}
+
+/** Change one of the user's messages; the reply and everything after it are replaced. */
+export const streamEdit = (messageId, content, handlers) => streamRequest(`/messages/${messageId}/edit`, { content }, handlers)
+
+/** Answer the question before this reply again. */
+export const streamRegenerate = (messageId, handlers) => streamRequest(`/messages/${messageId}/regenerate`, {}, handlers)
+
+async function streamRequest(path, data, { signal, onMeta, onDelta, onDone, onError }) {
   await ensureCsrfCookie()
 
-  // With an image the request is multipart; the browser sets its Content-Type.
   const requestHeaders = headers({ Accept: 'text/event-stream' })
-  let body
-  if (image) {
-    body = new FormData()
-    if (conversationId) body.append('conversation_id', conversationId)
-    if (content) body.append('content', content)
-    body.append('image', image, 'image.jpg')
-    delete requestHeaders['Content-Type']
-  } else {
-    body = JSON.stringify({ conversation_id: conversationId ?? null, content })
-  }
+  const isForm = data instanceof FormData
+  // The browser sets the multipart Content-Type (with its boundary) itself.
+  if (isForm) delete requestHeaders['Content-Type']
 
-  const response = await fetch('/api/chat', {
+  const response = await fetch(`/api${path}`, {
     method: 'POST',
     credentials: 'same-origin',
     headers: requestHeaders,
-    body,
+    body: isForm ? data : JSON.stringify(data),
     signal,
   })
 

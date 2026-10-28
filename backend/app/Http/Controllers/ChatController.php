@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Conversation;
 use App\Models\Message;
 use App\Services\ChatService;
+use App\Services\DocumentReader;
 use App\Services\Llm\LlmClient;
 use App\Services\Llm\LlmException;
 use Illuminate\Http\JsonResponse;
@@ -21,69 +23,77 @@ class ChatController extends Controller
     /**
      * Save the user's message and stream the model's reply as server-sent events.
      *
+     * A message may carry one attachment: an image, or a document whose text is read.
      * Events: "meta" (ids), "delta" (text chunk), "done" (saved reply), "error".
      */
-    public function store(Request $request): StreamedResponse
+    public function store(Request $request, DocumentReader $reader): StreamedResponse
     {
         $data = $request->validate([
             'conversation_id' => ['nullable', 'integer'],
-            'content' => ['required_without:image', 'nullable', 'string', 'max:'.config('llm.max_input_chars')],
-            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:'.config('llm.max_image_kb'), 'dimensions:max_width=4096,max_height=4096'],
+            'content' => ['required_without_all:image,file', 'nullable', 'string', 'max:'.config('llm.max_input_chars')],
+            'image' => ['nullable', 'prohibits:file', 'file', 'mimes:jpg,jpeg,png,webp', 'max:'.config('llm.max_image_kb'), 'dimensions:max_width=4096,max_height=4096'],
+            'file' => ['nullable', 'file', 'extensions:'.implode(',', DocumentReader::EXTENSIONS), 'max:'.config('llm.max_file_kb')],
         ]);
 
         $content = trim($data['content'] ?? '');
         $image = $request->file('image');
-        abort_if($content === '' && ! $image, 422, 'The message is empty.');
+        $file = $request->file('file');
+        abort_if($content === '' && ! $image && ! $file, 422, 'The message is empty.');
+
+        // Read the document before anything is saved, so an unreadable file changes nothing.
+        $document = $file ? $reader->read($file, config('llm.max_file_chars')) : null;
 
         $user = $request->user();
 
         $conversation = isset($data['conversation_id'])
             ? $user->conversations()->findOrFail($data['conversation_id'])
-            : $this->chat->startConversation($user->id, $content !== '' ? $content : 'Image');
+            : $this->chat->startConversation($user->id, $content !== '' ? $content : ($file?->getClientOriginalName() ?? 'Image'));
 
         $userMessage = $conversation->messages()->create([
             'role' => Message::ROLE_USER,
             'content' => $content,
             'image_path' => $image?->store("images/{$user->id}", 'local'),
             'image_mime' => $image?->getMimeType(),
+            'file_name' => $file ? mb_substr($file->getClientOriginalName(), 0, 255) : null,
+            'file_text' => $document['text'] ?? null,
         ]);
 
-        $assistant = $conversation->messages()->create([
-            'role' => Message::ROLE_ASSISTANT,
-            'content' => '',
-            'status' => Message::STATUS_STREAMING,
+        return $this->streamReply($conversation, $userMessage, ['file_truncated' => $document['truncated'] ?? false]);
+    }
+
+    /**
+     * Change one of the user's messages and answer it again. Everything after it is replaced.
+     */
+    public function edit(Request $request, int $message): StreamedResponse
+    {
+        $message = $this->findOwnMessage($request, $message, Message::ROLE_USER);
+
+        $data = $request->validate([
+            'content' => [$message->image_path || $message->file_name ? 'nullable' : 'required', 'string', 'max:'.config('llm.max_input_chars')],
         ]);
 
-        return response()->stream(function () use ($conversation, $userMessage, $assistant) {
-            // Keep running after the browser disconnects so the partial reply is saved.
-            ignore_user_abort(true);
-            set_time_limit(config('llm.timeout') + 30);
+        $message->update(['content' => trim($data['content'] ?? '')]);
+        $this->chat->discardAfter($message);
 
-            $this->send('meta', [
-                'conversation' => $conversation->only(['id', 'title', 'created_at', 'updated_at']),
-                'user_message' => $userMessage->toPublicArray(),
-                'assistant_message_id' => $assistant->id,
-            ]);
+        return $this->streamReply($message->conversation, $message);
+    }
 
-            try {
-                $message = $this->chat->reply($conversation, $assistant, function (string $delta) {
-                    $this->send('delta', ['text' => $delta]);
+    /**
+     * Answer the user message before this reply again. The reply and anything after it are replaced.
+     */
+    public function regenerate(Request $request, int $message): StreamedResponse
+    {
+        $reply = $this->findOwnMessage($request, $message, Message::ROLE_ASSISTANT);
 
-                    return ! connection_aborted();
-                });
+        $question = $reply->conversation->messages()
+            ->where('role', Message::ROLE_USER)
+            ->where('id', '<', $reply->id)
+            ->reorder('id', 'desc')
+            ->firstOrFail();
 
-                $this->send('done', ['message' => $message->toPublicArray()]);
-            } catch (LlmException $e) {
-                $this->send('error', ['message' => $e->getMessage()]);
-            } catch (Throwable $e) {
-                Log::error('Chat reply failed', ['exception' => $e::class, 'message' => $e->getMessage()]);
-                $this->send('error', ['message' => 'Unexpected server error.']);
-            }
-        }, 200, [
-            'Content-Type' => 'text/event-stream',
-            'Cache-Control' => 'no-cache, no-transform',
-            'X-Accel-Buffering' => 'no',
-        ]);
+        $this->chat->discardAfter($question);
+
+        return $this->streamReply($reply->conversation, $question);
     }
 
     /**
@@ -110,6 +120,61 @@ class ChatController extends Controller
         return response()->json([
             'online' => $llm->health(),
             'model' => config('llm.model'),
+        ]);
+    }
+
+    private function findOwnMessage(Request $request, int $id, string $role): Message
+    {
+        return Message::whereKey($id)
+            ->where('role', $role)
+            ->whereHas('conversation', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->with('conversation')
+            ->firstOrFail();
+    }
+
+    /**
+     * Create the assistant message and stream its reply to $userMessage.
+     *
+     * @param  array<string, mixed>  $meta  extra fields for the "meta" event
+     */
+    private function streamReply(Conversation $conversation, Message $userMessage, array $meta = []): StreamedResponse
+    {
+        $assistant = $conversation->messages()->create([
+            'role' => Message::ROLE_ASSISTANT,
+            'content' => '',
+            'status' => Message::STATUS_STREAMING,
+        ]);
+
+        return response()->stream(function () use ($conversation, $userMessage, $assistant, $meta) {
+            // Keep running after the browser disconnects so the partial reply is saved.
+            ignore_user_abort(true);
+            set_time_limit(config('llm.timeout') + 30);
+
+            $this->send('meta', [
+                'conversation' => $conversation->only(['id', 'title', 'created_at', 'updated_at']),
+                'user_message' => $userMessage->toPublicArray(),
+                'assistant_message_id' => $assistant->id,
+                ...$meta,
+            ]);
+
+            try {
+                $message = $this->chat->reply($conversation, $assistant, function (string $delta) {
+                    $this->send('delta', ['text' => $delta]);
+
+                    return ! connection_aborted();
+                });
+
+                $this->send('done', ['message' => $message->toPublicArray()]);
+            } catch (LlmException $e) {
+                $this->send('error', ['message' => $e->getMessage()]);
+            } catch (Throwable $e) {
+                Log::error('Chat reply failed', ['exception' => $e::class, 'message' => $e->getMessage()]);
+                $this->send('error', ['message' => 'Unexpected server error.']);
+            }
+        }, 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache, no-transform',
+            'X-Accel-Buffering' => 'no',
         ]);
     }
 
