@@ -3,9 +3,11 @@ const base = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke
 
 export const Logo = ({ size = 32 }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
+    {/* The Arabic letter meem (م), first letter of مدى, with a point beyond it. */}
     <rect width="32" height="32" rx="9" fill="#0f766e" />
-    <path d="M9 21.5c0-5.5 3.1-10 7-10s7 4.5 7 10" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
-    <circle cx="16" cy="9.5" r="2.4" fill="#5eead4" />
+    <circle cx="16" cy="13" r="5" fill="none" stroke="#fff" strokeWidth="2.6" />
+    <path d="M16 18c0 4-1.5 6.5-5 7.5" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
+    <circle cx="23.5" cy="7.5" r="2.2" fill="#5eead4" />
   </svg>
 )
 
