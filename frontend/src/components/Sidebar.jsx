@@ -13,7 +13,12 @@ export default function Sidebar({ open, onClose, user, conversations, activeId, 
       >
         <div className="flex items-center gap-2 px-4 py-4">
           <Logo size={28} />
-          <span className="text-lg font-semibold">{t.appName}</span>
+          <div className="min-w-0 leading-tight">
+            <div className="text-lg font-semibold">{t.appName}</div>
+            <div className="truncate text-xs text-stone-500 dark:text-stone-400" dir="ltr">
+              {t.tagline}
+            </div>
+          </div>
         </div>
 
         <div className="px-3">

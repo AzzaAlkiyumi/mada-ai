@@ -89,7 +89,9 @@ systemctl reload "php${PHP_VERSION}-fpm"
 artisan up
 
 log "Checking the site"
-code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${DOMAIN}" -H 'Accept: application/json' http://127.0.0.1/api/me || true)"
+# Once HTTPS is on, plain HTTP only redirects, so ask over HTTPS (falling back to HTTP before certbot).
+code="$(curl -sk -o /dev/null -w '%{http_code}' --resolve "${DOMAIN}:443:127.0.0.1" -H 'Accept: application/json' "https://${DOMAIN}/api/me" || true)"
+[[ "$code" == "000" ]] && code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${DOMAIN}" -H 'Accept: application/json' http://127.0.0.1/api/me || true)"
 if [[ "$code" == "401" ]]; then
     echo "API is answering (401 = sign-in required, as expected)."
 else
