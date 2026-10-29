@@ -43,7 +43,7 @@ export default function Login({ onSignedIn, settings }) {
         <div className="flex flex-col items-center gap-3 text-center">
           <Logo size={48} />
           <h1 className="text-2xl font-semibold">{t.appName}</h1>
-          <p className="text-sm text-stone-500 dark:text-stone-400" dir="ltr">{t.tagline}</p>
+          <p className="text-sm text-stone-500 dark:text-stone-400">{t.tagline}</p>
         </div>
 
         <label className="block space-y-1.5">

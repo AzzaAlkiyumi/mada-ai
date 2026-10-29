@@ -15,7 +15,7 @@ export default function Sidebar({ open, onClose, user, conversations, activeId, 
           <Logo size={28} />
           <div className="min-w-0 leading-tight">
             <div className="text-lg font-semibold">{t.appName}</div>
-            <div className="truncate text-xs text-stone-500 dark:text-stone-400" dir="ltr">
+            <div className="truncate text-xs text-stone-500 dark:text-stone-400">
               {t.tagline}
             </div>
           </div>
@@ -76,7 +76,7 @@ export default function Sidebar({ open, onClose, user, conversations, activeId, 
             {modelOnline ? t.modelOnline : modelOnline === false ? t.modelOffline : t.loading}
           </div>
           <div className="flex items-center gap-1">
-            <span className="flex-1 truncate px-1 text-stone-600 dark:text-stone-400" dir="ltr">
+            <span className="flex-1 truncate px-1 text-stone-600 dark:text-stone-400">
               {user.email}
             </span>
             <button onClick={onOpenInstructions} aria-label={t.instructions} title={t.instructions} className="rounded-lg p-1.5 hover:bg-stone-200 dark:hover:bg-stone-800">

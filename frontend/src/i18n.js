@@ -3,7 +3,7 @@ import { createContext, useContext } from 'react'
 const strings = {
   ar: {
     appName: 'مدى',
-    tagline: 'Beyond What You Know',
+    tagline: 'إلى ما وراء حدود معرفتك',
     email: 'البريد الإلكتروني',
     password: 'كلمة المرور',
     remember: 'تذكّرني',
